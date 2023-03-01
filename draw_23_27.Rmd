@@ -11,7 +11,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ## 2023 - 2027 EPA Probabilistic Draw
 
-```{r begin-draw}
+```{r begin-draw, message = FALSE, warning = FALSE}
 library(spsurvey)
 citation("spsurvey")
 
@@ -51,23 +51,21 @@ Also used :
 # # change coords to UTM for better resolution? as per spsurvey
 basin_shp <- sp::spTransform(
   basin,
-  sp::CRS("+proj=utm +zone=10 +datum=WGS84"))
+  sp::CRS("+proj=utm +zone=18 +datum=WGS84"))
 
-raw<-read.csv(here::here("data/NHD_plus_basin.csv"))
-# 
-short<-raw %>% 
-  dplyr::select(1:16,38:40,48,49,131:146)
+#raw<-read.csv(here::here("data/NHD_plus_basin.csv"))
+
+# short<-raw %>% 
+#   dplyr::select(1:16,38:40,48,49,131:146)
 
 
 ```
 
-A character vector indicating the expected sample size for each level of caty_var, the unequal probability variable.  If the sampling design is stratified and the expected sample sizes are the same among strata, caty_n is a named vector whose names represent each level of caty_var and whose values represent each level's expected sample size -- these expected sample sizes are applied to all strata. The sum of caty_n must equal each stratum's value in n_base. If the sampling design is stratified and the expected sample sizes differ among strata, caty_n is a list where each element is named as a stratum in n_base. Each stratum's list element is a named vector whose names represent each level of caty_var and whose values represent each level's expected sample size (within the stratum). The sum of the values in each stratum's list element must equal that stratum's value in n_base.
-
-
-So we'll make a proportional analysis based on the basins, and then figure out how to get 10 sites from that proportion. make the list from the dataframe, and not the one listed in 2018.
 
 
 ```{r}
+#!fcode %in% c(#,#,# etc.)
+
 basin_sf<-sf::st_as_sf(basin_shp)
 basin_sf<-basin_sf %>% 
   dplyr::mutate(fcode=as.numeric(FCODE)) %>% 
@@ -90,22 +88,21 @@ basin_sf<-basin_sf %>%
 basin_sf<-basin_sf %>% 
   dplyr::filter(!is.na(M_BAS_NAME))
 
-li<-basin_sf %>% 
-  filter(M_BAS_NAME=="Atlantic Ocean-Long Island Sound") %>% 
-  filter(row_number()==1) %>% 
-  mutate(stream_order=4)
 
-basin_sf<-rbind(basin_sf,li)
-  #its probaby because it's missing streamorder4?
+basin_sf$M_BAS_NAME<-as.factor(snakecase::to_snake_case(basin_sf$M_BAS_NAME)) #making the basins alitte cleaner
 
-
-basin_sf<-sf::st_as_sf(basin_sf)
-
+ li<-basin_sf %>%
+   dplyr::filter(M_BAS_NAME %in%"atlantic_ocean_long_island_sound")
+#we'll do 2 separate calls for the AOLIS
+   
+ others<-basin_sf %>%
+   dplyr::filter(!M_BAS_NAME %in% "atlantic_ocean_long_island_sound")
 
 
 ```
 
-
+  
+# Method 2 - for all other basins
 
 ```{r using-epa-notes}
 ## set strata variable
@@ -113,41 +110,69 @@ stratum_var <- "M_BAS_NAME"
 
 ## set caty variable
 caty_var <- "stream_order"
-## set caty sample sizes
-basin_sf$stream_order<-as.character(basin_sf$stream_order)
 
-caty_n2 <- lapply(1:17, function(x) c("1" = 3, "2" = 3, "3" = 2, "4" = 2))
-names(caty_n2) <- unique(basin_sf$M_BAS_NAME)
+## set caty sample sizes
+
+caty_n2 <- lapply(1:16, function(x) c("1" = 3, "2" = 3, "3" = 2, "4" = 2))
+names(caty_n2) <- unique(others$M_BAS_NAME)
 caty_n2
 
+strata_n<-rep(10,16)
+names(strata_n)<-unique(others$M_BAS_NAME)
+strata_n
 
-### n1
-samp_n1 <- spsurvey::grts(
-  basin_sf,
-  n_base = 10,
+### n2
+samp_n2 <- spsurvey::grts(
+  sframe = others,
+  n_base = strata_n,
   n_over = 40,
   stratum_var = "M_BAS_NAME",
   caty_n = caty_n2,
-  caty_var = "stream_order"
+  caty_var = "stream_order",
+  seltype = "unequal"
 )
 ### look at caty_n structure
-samp_n1$design$caty_n
-
-samp_try <- spsurvey::grts(
-  basin_sf,
-  n_base = 10,
-  n_over = 40)
-
+samp_n2$design$caty_n
 
 ```
+# Method 2 for Long Island
 
-```{r}
-#troubleshoot
-basin_sum<-as.data.frame(basin_sf)
+```{r using-epa-notes}
+## set strata variable
+stratum_var <- "M_BAS_NAME"
 
-basin_sum<-basin_sum %>% 
-  select(stream_order,M_BAS_NAME) %>% 
-  group_by(M_BAS_NAME,stream_order) %>% 
-  summarise(n=n())
+## set caty variable
+caty_var <- "stream_order"
+
+## set caty sample sizes
+
+caty_n3 <- lapply(1, function(x) c("1" = 4, "2" = 4, "3" = 2))
+names(caty_n3) <- unique(li$M_BAS_NAME)
+caty_n3
+
+strata_n<-rep(10,1)
+names(strata_n)<-unique(li$M_BAS_NAME)
+strata_n
+
+### n2
+samp_n3 <- spsurvey::grts(
+  sframe = li,
+  n_base = strata_n,
+  n_over = 40,
+  stratum_var = "M_BAS_NAME",
+  caty_n = caty_n3,
+  caty_var = "stream_order",
+  seltype = "unequal"
+)
+### look at caty_n structure
+samp_n3$design$caty_n
+
+```
+YAS it worked
+
+```{r merge-data-frames}
+
+
+
 ```
 

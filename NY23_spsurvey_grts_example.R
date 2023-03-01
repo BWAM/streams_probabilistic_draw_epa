@@ -21,66 +21,66 @@ NE_Lakes<-spsurvey::NE_Lakes
 # stratification
 
 ## set strata variable
-stratum_var <- "ELEV_CAT"
+stratum_var_l <- "ELEV_CAT"
 ## set strata sample size
-strata_n <- c("high" = 5, "low" = 5)
+strata_n_l <- c("high" = 5, "low" = 5)
 ## could also run (useful if there are many names you don't want to type)
-strata_n <- c(5, 5)
-names(strata_n) <- unique(NE_Lakes[[stratum_var]])
+strata_n_l <- c(5, 5)
+names(strata_n_l) <- unique(NE_Lakes[[stratum_var_l]])
 
 # unequal selection probabilities
 
 ## set caty variable
-caty_var <- "AREA_CAT"
+caty_var_l <- "AREA_CAT"
 ## set caty sample sizes
 
 ### option 1: recycle caty vector
-caty_n1 <- c("small" = 3, "large" = 2)
-caty_n1
+caty_n1_l <- c("small" = 3, "large" = 2)
+caty_n1_l
 
 ### option 2: recycle list structure
-caty_n2 <- lapply(1:2, function(x) c("small" = 3, "large" = 2))
-names(caty_n2) <- names(strata_n)
-caty_n2
+caty_n2_l <- lapply(1:2, function(x) c("small" = 3, "large" = 2))
+names(caty_n2_l) <- names(strata_n_l)
+caty_n2_l
 
 ### option 3: by hand (avoid this if possible)
-caty_n3 <- list(
+caty_n3_l <- list(
   "high" = c("small" = 3, "large" = 2),
   "low" = c("small" = 3, "large" = 2)
 )
-caty_n3
+caty_n3_l
 
 ## can run all three designs
 
 ### n1
 samp_n1 <- spsurvey::grts(
   NE_Lakes,
-  n_base = strata_n,
-  stratum_var = stratum_var,
-  caty_n = caty_n1,
-  caty_var = caty_var
+  n_base = strata_n_l,
+  stratum_var = stratum_var_l,
+  caty_n = caty_n1_l,
+  caty_var = caty_var_l
 )
 ### look at caty_n structure
 samp_n1$design$caty_n
 
 ### n2
-samp_n2 <- grts(
+samp_n2_l <- grts(
   NE_Lakes,
-  n_base = strata_n,
-  stratum_var = stratum_var,
-  caty_n = caty_n2,
-  caty_var = caty_var
+  n_base = strata_n_l,
+  stratum_var = stratum_var_l,
+  caty_n = caty_n2_l,
+  caty_var = caty_var_l
 )
 ### look at caty_n structure
-samp_n2$design$caty_n
+samp_n2_l$design$caty_n
 
 ### n3
-samp_n3 <- grts(
+samp_n3_l <- grts(
   NE_Lakes,
-  n_base = strata_n,
-  stratum_var = stratum_var,
-  caty_n = caty_n3,
-  caty_var = caty_var
+  n_base = strata_n_l,
+  stratum_var = stratum_var_l,
+  caty_n = caty_n3_l,
+  caty_var = caty_var_l
 )
 ## look at caty_n structure
-samp_n3$design$caty_n
+samp_n3_l$design$caty_n
