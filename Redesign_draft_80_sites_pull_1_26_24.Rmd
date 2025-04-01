@@ -1,0 +1,239 @@
+---
+title: "Probabilistic_redesign_draft_site_selection"
+author: "Keleigh Reynolds"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+```
+
+## 2024 EPA Probabilistic Draw redesign
+we are going to do 80 sites stratified by stream order
+
+
+```{r begin-draw, message = FALSE, warning = FALSE}
+library(spsurvey)
+citation("spsurvey")
+
+```
+
+
+```{r begin-GRTS}
+set.seed(22) #set seed for analysis
+
+```
+
+we are going to run it with unequal inclusion probability; stratified by eco-region Level III
+
+# from previous draws
+
+Survey Design: A Generalized Random Tessellation Stratified (GRTS) survey design for a linear resource was used.  The GRTS design includes reverse hierarchical ordering of the selected sites.
+
+Multi-density categories:  Rivers are selected with unequal probability by stream order category: 1st, 2nd, 3rd, and 4th+ strahler orders.
+
+Also used : 
+"The coordinate reference system (CRS) for the sample frame should use an area-preserving projection such as Albers or UTM so that spatial distances are equivalent for all directions. Geographic CRS are not accepted." converted to UTM
+
+
+```{r get-backround-files}
+
+ nhd<-sf::read_sf("data/map_files/NRSA2324.shp")
+#this was taken from teh filegeo-database 
+#L:\DOW\BWAM Share\data\streams\ArcGIS_Data\Hyrdo\NHD_Layers\EPA_NHD_PLUS_created_2023_03_01, and a shape file was created and loaded into this project
+
+# # change coords to UTM for better resolution? as per spsurvey
+# basin_shp <- sp::spTransform(
+#   basin,
+#   sp::CRS("+proj=utm +zone=18 +datum=WGS84"))
+
+
+nhd_shp<-sf::st_transform(nhd, crs = "+proj=utm +zone=18 +datum=WGS84") #works with the sf object
+
+
+```
+
+
+
+```{r}
+#!fcode %in% c(#,#,# etc.)
+
+#nhd_sf<-sf::st_as_sf(nhd_shp)
+nhd_sf<-nhd_shp
+
+nhd_sf<-nhd_sf %>% 
+  dplyr::mutate(fcode=as.numeric(FCODE)) %>% 
+  dplyr::filter(FRAME23 =="Include")%>% 
+  dplyr::mutate(stream_order = as.numeric(STRAH_ORD)) %>% 
+  dplyr::mutate(stream_order = dplyr::case_when(
+    stream_order >= 4~4,
+    TRUE ~ stream_order)) %>% 
+  dplyr::filter(stream_order != 0)
+
+nhd_sf_less_4<-nhd_shp %>% 
+  dplyr::mutate(fcode=as.numeric(FCODE)) %>% 
+  dplyr::filter(FRAME23 =="Include")%>% 
+  dplyr::mutate(stream_order = as.numeric(STRAH_ORD)) %>%
+  dplyr::filter(stream_order != 0) %>% 
+  dplyr::filter(stream_order <= 4)
+
+
+nhd_sum<-as.data.frame(nhd_sf) %>% 
+  group_by(stream_order) %>% 
+  mutate(num= 1) %>% 
+  summarise(sum = sum(num))
+
+
+
+```
+
+
+```{r stream-order-strata-no-eco-80-sites}
+## set strata variable
+stratum_var <- "stream_order"
+stratum_names <-unique(nhd_sf$stream_order)
+strata_n_l <- c("1" = 24, "2" = 24, "3" = 16, "4" = 16)
+names(strata_n_l) <- unique(nhd_sf[[stratum_var]])
+
+
+## set caty variable
+caty_var <- "stream_order"
+
+## set caty sample sizes
+#this is for 80 sites statewide
+caty_n <- c("1" = 24, "2" = 24, "3" = 16, "4" = 16)
+names(caty_n) <- unique(nhd_sf[[stratum_var]])
+
+n_over = c("1" = 96, "2" = 96, "3" = 64, "4" = 64)
+names(n_over) <- unique(nhd_sf[[stratum_var]])
+
+### n2
+samp_n80 <- spsurvey::grts(
+  sframe = nhd_sf,
+  n_base = strata_n_l,
+  n_over =n_over,
+  stratum_var = "stream_order",
+  #caty_n = caty_n,
+  #caty_var = caty_n
+)
+
+
+base80<-as.data.frame(samp_n80$sites_base)
+overdraw<-as.data.frame(samp_n80$sites_over)
+
+prob_24_25<-rbind(base80,overdraw)
+
+write.csv(prob_24_25,"outputs/prob_draw_24_25.csv")
+
+base80_sum<-base80 %>% 
+  select(stream_order,siteID) %>%
+  group_by(stream_order) %>% 
+  summarise(n=(length(siteID)))
+
+
+```
+
+```{r}
+## set strata variable
+stratum_var <- "stream_order"
+stratum_names <-unique(nhd_sf$stream_order)
+strata_n_l <- c("1" = 24, "2" = 24, "3" = 16, "4" = 16)
+names(strata_n_l) <- unique(nhd_sf[[stratum_var]])
+
+
+## set caty variable
+caty_var <- "stream_order"
+
+## set caty sample sizes
+#this is for 80 sites statewide
+caty_n_2 <- c("1" = 24, "2" = 24, "3" = 16, "4" = 16)
+names(caty_n_2) <- unique(nhd_sf[[stratum_var]])
+
+n_over = c("1" = 24, "2" = 24, "3" = 16, "4" = 16)
+names(n_over) <- unique(nhd_sf[[stratum_var]])
+
+### n2
+samp_n80_2 <- spsurvey::grts(
+  sframe = nhd_sf,
+  n_base = strata_n_l,
+  n_over =n_over,
+  stratum_var = "stream_order",
+  #caty_n = caty_n,
+  #caty_var = caty_n
+)
+
+
+base80<-as.data.frame(samp_n80_2$sites_base)
+overdraw<-as.data.frame(samp_n80_2$sites_over)
+
+prob_24_25_2<-rbind(base80,overdraw)
+
+write.csv(prob_24_25_2,"outputs/prob_draw_24_25_smaller_overdraw.csv")
+
+base80_sum_2<-base80 %>% 
+  select(stream_order,siteID) %>%
+  group_by(stream_order) %>% 
+  summarise(n=(length(siteID)))
+```
+
+
+```{r subset with long island legacy, smaller overdraw and no larger than 4th}
+#legacy
+options(scipen = 9999)
+leg<-spsurvey::NE_Lakes_Legacy
+#adding legacy site as per communication with Dan Rearick on 2/9/24
+
+
+legacy_LI <- data.frame (stream_order  = c("3"),
+                  latitude = c("4531702.45272212"),
+                  longitude = c("691597.159403965"))
+#weight of this one originally 42302.29222
+
+legacy_LI<-sf::st_as_sf(legacy_LI, coords =c("longitude", "latitude"))
+legacy_LI<-sf::st_set_crs(legacy_LI,"+proj=utm +zone=18 +datum=WGS84")
+
+
+## set strata variable
+stratum_var <- "stream_order"
+stratum_names <-unique(nhd_sf$stream_order)
+strata_n_l <- c("1" = 24, "2" = 24, "3" = 16, "4" = 16)
+names(strata_n_l) <- unique(nhd_sf[[stratum_var]])
+
+
+## set caty variable
+caty_var <- "stream_order"
+
+## set caty sample sizes
+#this is for 80 sites statewide
+caty_n_2 <- c("1" = 24, "2" = 24, "3" = 16, "4" = 16)
+names(caty_n_2) <- unique(nhd_sf[[stratum_var]])
+
+n_over = c("1" = 24, "2" = 24, "3" = 16, "4" = 16)
+names(n_over) <- unique(nhd_sf[[stratum_var]])
+
+### n2
+samp_n80_3 <- spsurvey::grts(
+  sframe = nhd_sf_less_4,
+  n_base = strata_n_l,
+  n_over =n_over,
+  stratum_var = "stream_order",
+  #caty_n = caty_n,
+  #caty_var = caty_n
+  legacy_sites = legacy_LI
+)
+
+
+# base80_3<-as.data.frame(samp_n80_3$sites_base)
+# overdraw<-as.data.frame(samp_n80_3$sites_over)
+
+combined <- sp_rbind(samp_n80_3)
+write_sf(combined, here::here("outputs/legacy_24_25.shp"))
+
+
+base80_sum_3<-base80_3 %>% 
+  select(stream_order,siteID) %>%
+  group_by(stream_order) %>% 
+  summarise(n=(length(siteID)))
+```

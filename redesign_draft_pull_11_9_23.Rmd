@@ -1,0 +1,323 @@
+---
+title: "Probabilistic_redesign_draft_site_selection"
+author: "Keleigh Reynolds"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+```
+
+## 2024 EPA Probabilistic Draw redesign
+we are doing 80 sites over 2 years, with stratification by SO.
+
+
+
+```{r begin-draw, message = FALSE, warning = FALSE}
+library(spsurvey)
+citation("spsurvey")
+
+```
+
+
+```{r begin-GRTS}
+set.seed(22) #set seed for analysis
+
+```
+
+we are going to run it with unequal inclusion probability; stratified by eco-region Level III
+
+# from previous draws
+
+Survey Design: A Generalized Random Tessellation Stratified (GRTS) survey design for a linear resource was used.  The GRTS design includes reverse hierarchical ordering of the selected sites.
+
+Multi-density categories:  Rivers are selected with unequal probability by stream order category: 1st, 2nd, 3rd, and 4th+ strahler orders.
+
+Also used : 
+"The coordinate reference system (CRS) for the sample frame should use an area-preserving projection such as Albers or UTM so that spatial distances are equivalent for all directions. Geographic CRS are not accepted." converted to UTM
+
+
+```{r get-backround-files}
+
+# example<-spsurvey::NE_Lakes
+# prev_output<-read.csv("C:/Users/kareynol/New York State Office of Information Technology Services/SMAS - Site Selection/Probabilistic_epa_draw_data/Probabilistic/2018_2022Draw/2018_prob_draw.csv")
+
+ # basin_path <- here::here("data/map_files") #for keleigh
+ # basin <- rgdal::readOGR(
+ #   dsn = basin_path,
+ #   layer = "NHD_plus_2_basin",
+ #   verbose = FALSE
+ # ) rgdal is no longer supported by this version of R
+ 
+ nhd<-sf::read_sf("data/map_files/NRSA2324.shp")
+
+# # change coords to UTM for better resolution? as per spsurvey
+# basin_shp <- sp::spTransform(
+#   basin,
+#   sp::CRS("+proj=utm +zone=18 +datum=WGS84"))
+
+
+nhd_shp<-st_transform(nhd, crs = "+proj=utm +zone=18 +datum=WGS84") #works with the sf object
+
+
+
+```
+
+
+
+```{r}
+#!fcode %in% c(#,#,# etc.)
+
+#nhd_sf<-sf::st_as_sf(nhd_shp)
+nhd_sf<-nhd_shp
+
+nhd_sf<-nhd_sf %>% 
+  dplyr::mutate(fcode=as.numeric(FCODE)) %>% 
+  dplyr::filter(fcode != 33600|
+                  fcode != 33601|
+                  fcode != 33603|
+                  fcode != 42000|
+                  fcode != 42001|
+                  fcode != 42002|
+                  fcode != 42003|
+                  fcode != 56600
+                ) %>% 
+  dplyr::filter(!dplyr::between(fcode,42800,42824)) %>% 
+  dplyr::mutate(stream_order = as.numeric(STRAH_ORD)) %>% 
+  dplyr::mutate(stream_order = dplyr::case_when(
+    stream_order >= 4~4,
+    TRUE ~ stream_order
+  )) %>% 
+  dplyr::filter(stream_order != 0) %>% 
+  dplyr::filter(US_L3NAME != "")
+
+
+nhd_sum<-as.data.frame(nhd_sf) %>% 
+  group_by(US_L3NAME,stream_order) %>% 
+  mutate(num= 1) %>% 
+  summarise(sum = sum(num))
+
+```
+
+
+
+```{r using-epa-notes}
+## set strata variable
+nhd_sf<-st_as_sf(nhd_sf)
+nhd_sf<-nhd_sf %>% 
+  filter(stream_order>0) %>% 
+  filter(!is.na(US_L3NAME))
+
+stratum_var <- "US_L3NAME"
+stratum_names <-unique(nhd_sf$US_L3NAME)
+
+## set caty variable
+caty_var <- "stream_order"
+
+## set caty sample sizes
+#this is for 150 sites statewide - so 16 per eco-region
+caty_n2 <- lapply(1:9, function(x) c("1" = 5, "2" = 5, "3" = 3, "4" = 3))
+names(caty_n2) <- unique(nhd_sf$US_L3NAME)
+caty_n2
+
+strata_n<-rep(16,9)
+names(strata_n)<-unique(nhd_sf$US_L3NAME)
+strata_n
+
+### n2
+samp_n150 <- spsurvey::grts(
+  sframe = nhd_sf,
+  n_base = strata_n,
+  #n_over = 0,
+  stratum_var = "US_L3NAME",
+  caty_n = caty_n2,
+  caty_var = "stream_order",
+  seltype = "unequal"
+)
+
+base150<-as.data.frame(samp_n150$sites_base)
+write.csv(base150,"outputs/eco_region_redesign_150.csv")
+
+
+```
+
+
+
+```{r next-step-down-minimum - 60 sites total}
+## set strata variable
+stratum_var <- "US_L3NAME"
+stratum_names <-unique(nhd_sf$US_L3NAME)
+
+## set caty variable
+caty_var <- "stream_order"
+
+## set caty sample sizes
+#this is for 60 sites statewide - so 6 per eco-region
+caty_n <- lapply(1:9, function(x) c("1" = 2, "2" = 2, "3" = 1, "4" = 1))
+names(caty_n) <- unique(nhd_sf$US_L3NAME)
+caty_n
+
+strata_n<-rep(6,9)
+names(strata_n)<-unique(nhd_sf$US_L3NAME)
+strata_n
+
+### n2
+samp_n50 <- spsurvey::grts(
+  sframe = nhd_sf,
+  n_base = strata_n,
+  #n_over = 0,
+  stratum_var = "US_L3NAME",
+  caty_n = caty_n,
+  caty_var = "stream_order",
+  #seltype = "unequal"
+)
+
+base50<-as.data.frame(samp_n50$sites_base)
+write.csv(base50,"outputs/eco_region_redesign_50.csv")
+
+```
+
+```{r no strata}
+## set strata variable
+stratum_var <- "US_L3NAME"
+stratum_names <-unique(nhd_sf$US_L3NAME)
+
+## set caty variable
+caty_var <- "stream_order"
+
+## set caty sample sizes
+#this is for 60 sites statewide - so 6 per eco-region
+# caty_n <- lapply(1, function(x) c("1" = 2, "2" = 2, "3" = 1, "4" = 1))
+# names(caty_n) <- unique(nhd_sf$US_L3NAME)
+# caty_n
+# 
+# strata_n<-rep(6,9)
+# names(strata_n)<-unique(nhd_sf$US_L3NAME)
+# strata_n
+
+### n2
+samp_n150_no_strata <- spsurvey::grts(
+  sframe = nhd_sf,
+  n_base = 150,
+  #n_over = 0,
+  #stratum_var = "US_L3NAME",
+  #caty_n = caty_n,
+  #caty_var = "stream_order",
+  #seltype = "unequal"
+)
+
+base50<-as.data.frame(samp_n150_no_strata$sites_base)
+write.csv(base50,"outputs/eco_region_redesign_150_no_strata.csv")
+
+base50_sum<-base50 %>% 
+  select(stream_order,siteID) %>%
+  group_by(stream_order) %>% 
+  summarise(n=(length(siteID)))
+
+nhd_sum_2<-as.data.frame(nhd_sf) %>% 
+  group_by(stream_order) %>% 
+  reframe(n=length(FRAME23_ID),
+            km=sum(LENGTH_KM),
+            miles = km / 0.62137119) %>% 
+  ungroup() %>% 
+  mutate(sum = sum(miles)) %>% 
+  group_by(stream_order) %>% 
+  mutate(proportion = miles/sum)
+
+```
+
+```{r no-strata-60-base}
+### n2
+samp_n60_no_strata <- spsurvey::grts(
+  sframe = nhd_sf,
+  n_base = 60,
+  #n_over = 0,
+  #stratum_var = "US_L3NAME",
+  #caty_n = caty_n,
+  #caty_var = "stream_order",
+  #seltype = "unequal"
+)
+
+base60_ns<-as.data.frame(samp_n60_no_strata$sites_base)
+write.csv(base60_ns,"outputs/eco_region_redesign_60_no_strata.csv")
+
+base60_sum<-base60_ns %>% 
+  select(stream_order,siteID) %>%
+  group_by(stream_order) %>% 
+  summarise(n=(length(siteID)))
+
+```
+
+```{r stream-order-strata-no-eco}
+## set strata variable
+stratum_var <- "stream_order"
+stratum_names <-unique(nhd_sf$stream_order)
+strata_n_l <- c("1" = 45, "2" = 45, "3" = 30, "4" = 30)
+names(strata_n_l) <- unique(nhd_sf[[stratum_var]])
+
+
+## set caty variable
+caty_var <- "stream_order"
+
+## set caty sample sizes
+#this is for 60 sites statewide - so 6 per eco-region
+caty_n <- c("1" = 45, "2" = 45, "3" = 30, "4" = 30)
+names(caty_n) <- unique(nhd_sf[[stratum_var]])
+
+
+### n2
+samp_n150_so_only <- spsurvey::grts(
+  sframe = nhd_sf,
+  n_base = strata_n_l,
+  #n_over = 0,
+  stratum_var = "stream_order",
+  #caty_n = caty_n,
+  #caty_var = caty_n
+)
+
+
+base50<-as.data.frame(samp_n150_so_only$sites_base)
+write.csv(base50,"outputs/eco_region_redesign_150_so_only.csv")
+
+base50_sum<-base50 %>% 
+  select(stream_order,siteID) %>%
+  group_by(stream_order) %>% 
+  summarise(n=(length(siteID)))
+
+
+```
+
+```{r stream-order-proportion-strata-no-eco}
+## set strata variable
+stratum_var <- "stream_order"
+stratum_names <-unique(nhd_sf$stream_order)
+strata_n_l <- c("1" = 75, "2" = 33, "3" = 17, "4" = 19)
+names(strata_n_l) <- unique(nhd_sf[[stratum_var]])
+
+### n2
+samp_n150_so_only_prop <- spsurvey::grts(
+  sframe = nhd_sf,
+  n_base = strata_n_l,
+  #n_over = 0,
+  stratum_var = "stream_order",
+  #caty_n = caty_n,
+  #caty_var = caty_n
+)
+
+
+base50<-as.data.frame(samp_n150_so_only_prop$sites_base)
+write.csv(base50,"outputs/eco_region_redesign_150_so_prop.csv")
+
+base50_sum<-base50 %>% 
+  select(stream_order,siteID) %>%
+  group_by(stream_order) %>% 
+  summarise(n=(length(siteID)))
+
+
+```
+
+
+
+
