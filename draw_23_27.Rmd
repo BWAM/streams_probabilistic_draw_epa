@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 ---
 title: "2023-2027_epa_draw"
 author: "Keleigh Reynolds"
@@ -176,3 +177,183 @@ YAS it worked
 
 ```
 
+=======
+---
+title: "2023-2027_epa_draw"
+author: "Keleigh Reynolds"
+date: "1/20/2023"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## 2023 - 2027 EPA Probabilistic Draw
+
+```{r begin-draw, message = FALSE, warning = FALSE}
+library(spsurvey)
+citation("spsurvey")
+
+```
+
+```{r begin-GRTS}
+set.seed(51) #set seed for analysis
+
+```
+
+we are going to run it with unequal inclusion probability; stratified by basin
+
+# from previous draws
+
+Sample Frame: Sample frame used is the National Rivers and Streams Assessment sample frame for 2013-14 survey (indicated by FRAME14 attribute in NRSA sample frame.  The New York basins were added as an attribute based on GIS coverage provided by New York.  Only segments that were “Included” in FRAME14 are used in the survey design
+
+Survey Design: A Generalized Random Tessellation Stratified (GRTS) survey design for a linear resource was used.  The GRTS design includes reverse hierarchical ordering of the selected sites.
+
+Multi-density categories:  Rivers are selected with unequal probability by stream order category: 1st, 2nd, 3rd, and 4th+ strahler orders.
+
+Also used : 
+"The coordinate reference system (CRS) for the sample frame should use an area-preserving projection such as Albers or UTM so that spatial distances are equivalent for all directions. Geographic CRS are not accepted." converted to UTM
+
+
+```{r get-backround-files}
+
+# example<-spsurvey::NE_Lakes
+# prev_output<-read.csv("C:/Users/kareynol/New York State Office of Information Technology Services/SMAS - Site Selection/Probabilistic_epa_draw_data/Probabilistic/2018_2022Draw/2018_prob_draw.csv")
+
+ basin_path <- here::here("data/map_files") #for keleigh
+ basin <- rgdal::readOGR(
+   dsn = basin_path,
+   layer = "NHD_plus_2_basin",
+   verbose = FALSE
+ )
+
+# # change coords to UTM for better resolution? as per spsurvey
+basin_shp <- sp::spTransform(
+  basin,
+  sp::CRS("+proj=utm +zone=18 +datum=WGS84"))
+
+#raw<-read.csv(here::here("data/NHD_plus_basin.csv"))
+
+# short<-raw %>% 
+#   dplyr::select(1:16,38:40,48,49,131:146)
+
+
+```
+
+
+
+```{r}
+#!fcode %in% c(#,#,# etc.)
+
+basin_sf<-sf::st_as_sf(basin_shp)
+basin_sf<-basin_sf %>% 
+  dplyr::mutate(fcode=as.numeric(FCODE)) %>% 
+  dplyr::filter(fcode != 33600,
+                  fcode != 33601,
+                  fcode != 33603,
+                  fcode != 42000,
+                  fcode != 42001,
+                  fcode != 42002,
+                  fcode != 42003,
+                  fcode != 56600) %>% 
+  dplyr::filter(!dplyr::between(fcode,42800,42824)) %>% 
+  dplyr::mutate(stream_order = as.numeric(StreamOrde)) %>% 
+  dplyr::mutate(stream_order = dplyr::case_when(
+    stream_order >= 4~4,
+    TRUE ~ stream_order
+  )) %>% 
+  dplyr::filter(stream_order != 0)
+
+basin_sf<-basin_sf %>% 
+  dplyr::filter(!is.na(M_BAS_NAME))
+
+
+basin_sf$M_BAS_NAME<-as.factor(snakecase::to_snake_case(basin_sf$M_BAS_NAME)) #making the basins alitte cleaner
+
+ li<-basin_sf %>%
+   dplyr::filter(M_BAS_NAME %in%"atlantic_ocean_long_island_sound")
+#we'll do 2 separate calls for the AOLIS
+   
+ others<-basin_sf %>%
+   dplyr::filter(!M_BAS_NAME %in% "atlantic_ocean_long_island_sound")
+
+
+```
+
+  
+# Method 2 - for all other basins
+
+```{r using-epa-notes}
+## set strata variable
+stratum_var <- "M_BAS_NAME"
+
+## set caty variable
+caty_var <- "stream_order"
+
+## set caty sample sizes
+
+caty_n2 <- lapply(1:16, function(x) c("1" = 3, "2" = 3, "3" = 2, "4" = 2))
+names(caty_n2) <- unique(others$M_BAS_NAME)
+caty_n2
+
+strata_n<-rep(10,16)
+names(strata_n)<-unique(others$M_BAS_NAME)
+strata_n
+
+### n2
+samp_n2 <- spsurvey::grts(
+  sframe = others,
+  n_base = strata_n,
+  n_over = 40,
+  stratum_var = "M_BAS_NAME",
+  caty_n = caty_n2,
+  caty_var = "stream_order",
+  seltype = "unequal"
+)
+### look at caty_n structure
+samp_n2$design$caty_n
+
+```
+# Method 2 for Long Island
+
+```{r using-epa-notes}
+## set strata variable
+stratum_var <- "M_BAS_NAME"
+
+## set caty variable
+caty_var <- "stream_order"
+
+## set caty sample sizes
+
+caty_n3 <- lapply(1, function(x) c("1" = 4, "2" = 4, "3" = 2))
+names(caty_n3) <- unique(li$M_BAS_NAME)
+caty_n3
+
+strata_n<-rep(10,1)
+names(strata_n)<-unique(li$M_BAS_NAME)
+strata_n
+
+### n2
+samp_n3 <- spsurvey::grts(
+  sframe = li,
+  n_base = strata_n,
+  n_over = 40,
+  stratum_var = "M_BAS_NAME",
+  caty_n = caty_n3,
+  caty_var = "stream_order",
+  seltype = "unequal"
+)
+### look at caty_n structure
+samp_n3$design$caty_n
+
+```
+YAS it worked
+
+```{r merge-data-frames}
+
+
+
+```
+
+>>>>>>> 9392c693e9925a5c31793683dd3349f8ea627a0b
